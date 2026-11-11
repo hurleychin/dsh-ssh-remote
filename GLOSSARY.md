@@ -8,7 +8,7 @@
 - **远端主机（remote host）**：通过 SSH 可达的另一台机器，其上运行着（或将由本插件启动）另一个 DSH。示例：`qinhulin@10.37.234.2`。
 - **远端 DSH（remote DSH）**：远端主机上的 `dsh web` 进程。它监听远端回环 `127.0.0.1:<remotePort>`，只认带 `?token=` 的 URL 或已签发的 cookie。
 - **launch-and-own**：本插件**自行启动并拥有**远端 `dsh web`（而非附着一个用户已运行的实例）的策略。原因见 ADR-0001：远端 `dsh web` 的 `launchToken` 每进程随机、仅存内存、只在启动时打印一次，无法从外部恢复。
-- **远端状态目录（remote state dir）**：远端 `$HOME/.dsh-ssh-remote/`，存放 `web.pid / web.cmd / web.log`。用于下次连接时判定「自己上次启动的实例」是否仍可复用。对应 dsh-go 的 `~/.dsh-app-remote/`。
+- **远端状态目录（remote state dir）**：远端主机上存放 `web.pid / web.cmd / web.log` 的目录，用于下次连接时判定「自己上次启动的实例」是否仍可复用。对应 dsh-go 的 `~/.dsh-app-remote/`。**默认为 `$HOME/.dsh-ssh-remote`，可按主机配置**（host config 的 `remoteStateDir`）；配置值由远端 shell 展开：`~`/`$HOME` 开头按家目录、相对路径相对 `$HOME`、绝对路径原样。
 - **主机记录（host record）**：本地插件对一台远端主机的内存态，包含连接阶段、隧道本地端口、隧道句柄、日志。不持久化。
 - **主机配置（host config）**：持久化在本地 `$DSH_HOME/ssh-remote/hosts.json` 的非敏感字段：`name / host / user / port / remotePort / token`。**token 默认不落盘**（留空则每次连接从远端日志实时读取）。
 - **隧道（tunnel）**：`ssh -N -L 127.0.0.1:<localPort>:127.0.0.1:<remotePort> <address>`。本地 `localPort` 在一条连接记录存活期间保持不变，使浏览器在新标签页打开的 URL 稳定。

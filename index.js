@@ -88,6 +88,10 @@ function normalizeHost(input) {
     address: user ? `${user}@${host}` : host,
     remotePort: Number.isFinite(+input.remotePort) && +input.remotePort > 0 ? +input.remotePort : 0,
     token: String(input.token || '').trim(),
+    // Remote state dir: where the plugin stores web.cmd / web.pid / web.log on
+    // the remote. Interpreted by the remote shell; blank means the default
+    // ~/.dsh-ssh-remote. See ADR-0001.
+    remoteStateDir: String(input.remoteStateDir || '').trim() || '$HOME/.dsh-ssh-remote',
     createdAt: input.createdAt || now(),
   }
 }
@@ -166,6 +170,7 @@ class SshRemoteService {
     if (!rec) return { phase: 'idle' }
     return { phase: rec.phase, error: rec.error, url: rec.url, localPort: rec.localPort }
   }
+
 
   async saveHost(input) {
     await this.readyPromise
@@ -367,7 +372,7 @@ class SshRemoteService {
    */
   async _ensureRemoteDsh(rec) {
     const host = rec.host
-    const script = this._bootstrapScript()
+    const script = this._bootstrapScript(host.remoteStateDir)
     this._log(rec, 'remote bootstrap')
     const out = await this._runRemote(host, script, 90000)
     // Parse structured DSHSSH lines.
@@ -393,16 +398,36 @@ class SshRemoteService {
     return { port: parseInt(m[1], 10), token: m[2] }
   }
 
-  _bootstrapScript() {
+  _bootstrapScript(stateDir) {
     // Runs under POSIX sh (Linux/mac natively; Windows via git-bash + nohup).
     // Reuse detection is HTTP-based on the logged URL rather than a pid liveness
     // check, because the background child's shell pid does not map to a killable
     // process across separate SSH sessions on MINGW/Windows. Output is tagged so
     // login banners can't be mistaken for results.
     const T = TAG
+    // The configured state dir is passed as a single shell-quoted literal so its
+    // text reaches the remote verbatim; the remote shell then expands a leading
+    // `~` / `$HOME` / relative form against the remote home (see `resolve_dir`).
+    // Blank falls back to the default. Never interpolate the raw value unquoted.
+    const raw = String(stateDir || '').trim() || '$HOME/.dsh-ssh-remote'
     return [
       'set -u',
-      'D="$HOME/.dsh-ssh-remote"',
+      'DSR=' + shQuote(raw),
+      // Expand the configured state dir against the REMOTE shell environment:
+      // a leading `~` or `$HOME` is $HOME, a relative path is relative to $HOME,
+      // an absolute path is used as-is. `case` matching (no eval) keeps it safe.
+      'resolve_dir() {',
+      '  d=$DSR',
+      '  case "$d" in',
+      '    \\~|\\~/*) rest=${d#\\~}; rest=${rest#/}; d="$HOME/$rest";;',
+      '    \\$HOME|\\$HOME/*) rest=${d#\\$HOME}; rest=${rest#/}; d="$HOME/$rest";;',
+      '    /*) d=$d;;',
+      '    *) d="$HOME/$d";;',
+      '  esac',
+      '  case "$d" in /) ;; *) d=${d%/};; esac',
+      '  printf "%s" "$d"',
+      '}',
+      'D=$(resolve_dir)',
       'mkdir -p "$D" 2>/dev/null; chmod 700 "$D" 2>/dev/null',
       // Non-interactive, non-login `sh` (what `ssh host "sh -s"` gives us) does
       // NOT source ~/.profile or ~/.bashrc, so a `dsh` installed under a

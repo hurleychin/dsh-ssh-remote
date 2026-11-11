@@ -7,13 +7,14 @@
 1. 侧栏出现「远程主机」图标（`sidebar.panellist`，order 20），点击打开面板。
 2. 「添加主机」填入 `名称`、`主机`（`user@host` 或 `~/.ssh/config` 别名）、`SSH 端口`。
    - `远端 dsh 端口`、`远端 token` 留空即可：插件会 SSH 上去启动一个受管的远端 `dsh web` 并从日志读取端口与 token。
+   - `远端状态目录` 留空则为 `~/.dsh-ssh-remote`；可填绝对路径、`~`/`$HOME` 开头或相对路径（相对远端 `$HOME`）。插件在该目录存 `web.cmd / web.pid / web.log` 以复用已启动实例。
 3. 点「连接」。面板显示 `连接中 → 启动远端 dsh web… → 建立隧道… → 检查远端 Harness… → 已连接`。
 4. 连接成功后出现「打开远端 Harness」按钮，点开新标签页即进入远端那台 DSH（`http://127.0.0.1:<本地隧道口>/?token=…`）。
 
 ## 工作流程（对应参照的 SSH 分析流程）
 
 1. **connect**：`ssh -L 127.0.0.1:<localPort>:127.0.0.1:<remotePort>`（`ExitOnForwardFailure`、`ServerAliveInterval=15`）。
-2. **probe/own**：若未配置远端端口，SSH 执行引导脚本（非登录 `sh`，脚本自行为用户级 bin 目录补齐 PATH，见 [ADR-0003](docs/adr/0003-non-login-shell-path.md)），在远端 `$HOME/.dsh-ssh-remote/` 记录 `web.pid/web.cmd/web.log`，`dsh web --host 127.0.0.1 --port 0 --no-open` 启动，读日志首行 `…/?token=`。可复用则复用。
+2. **probe/own**：若未配置远端端口，SSH 执行引导脚本（非登录 `sh`，脚本自行为用户级 bin 目录补齐 PATH，见 [ADR-0003](docs/adr/0003-non-login-shell-path.md)），在远端**状态目录**（默认 `$HOME/.dsh-ssh-remote/`，可按主机配置）记录 `web.pid/web.cmd/web.log`，`dsh web --host 127.0.0.1 --port 0 --no-open` 启动，读日志首行 `…/?token=`。可复用则复用。
 3. **tunnel**：本地固定端口转发到远端回环端口。
 4. **check**：经隧道 HTTP 根路径，`401/303/200` 视为可达。
 5. **keepalive**：每 15s 健康检查；断线指数退避重连。

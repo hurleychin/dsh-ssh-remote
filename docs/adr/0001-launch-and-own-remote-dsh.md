@@ -9,7 +9,7 @@
 
 ## 决策
 
-**由插件自己启动并拥有远端 `dsh web`（launch-and-own）**：SSH 上去执行一段 POSIX 脚本，在远端 `$HOME/.dsh-ssh-remote/` 记录 `web.pid/web.cmd/web.log`，用 `dsh web --host 127.0.0.1 --port 0 --no-open` 启动并重定向其 stdout 到 `web.log`，从日志抓 `…/?token=` 行拿到端口与 token。下次连接先按「可复用」规则判断能否复用自己上次启动的实例。
+**由插件自己启动并拥有远端 `dsh web`（launch-and-own）**：SSH 上去执行一段 POSIX 脚本，在远端**状态目录**（默认 `$HOME/.dsh-ssh-remote/`，可按主机通过 `remoteStateDir` 配置）记录 `web.pid/web.cmd/web.log`，用 `dsh web --host 127.0.0.1 --port 0 --no-open` 启动并重定向其 stdout 到 `web.log`，从日志抓 `…/?token=` 行拿到端口与 token。下次连接先按「可复用」规则判断能否复用自己上次启动的实例。
 
 ## 为什么不 attach 既有实例
 
