@@ -1,7 +1,7 @@
 {
   "name": "@hurleychin/dsh-ssh-remote",
-  "version": "0.1.1",
-  "description": "Connect this DeepSeek Harness to the DSH on another host over SSH: launch or reuse a remote dsh web (configurable remote state dir), tunnel its port here, and open it in a new tab.",
+  "version": "0.2.0",
+  "description": "Connect this DeepSeek Harness to the DSH on another host over SSH: launch or reuse a remote dsh web, tunnel its port here, and open it in a new tab. Hosts are managed in a modal dialog with a live online/offline indicator.",
   "type": "module",
   "license": "MIT",
   "author": "hurleychin <qinhulin@gmail.com>",

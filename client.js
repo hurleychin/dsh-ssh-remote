@@ -15,22 +15,24 @@ window.__ModuleLoader__.load({
         heading: 'SSH remote hosts',
         subheading: 'Connect to a DeepSeek Harness running on another machine over SSH.',
         empty: 'No hosts yet. Add one to get started.',
-        add: 'Add host', save: 'Save', cancel: 'Cancel', delete: 'Delete',
+        add: 'Add host', addTitle: 'Add host', editTitle: 'Edit host',
+        save: 'Save', cancel: 'Cancel', delete: 'Delete', confirmDelete: 'Confirm delete',
+        deleteWarn: 'Delete this host and its connection?',
         connect: 'Connect', reconnect: 'Reconnect', disconnect: 'Disconnect',
         open: 'Open remote Harness', copyUrl: 'Copy URL', copied: 'Copied',
         name: 'Name', namePlaceholder: 'Home PC',
         host: 'Host', hostPlaceholder: 'user@example.com or an ~/.ssh/config alias',
-        port: 'SSH port', remotePort: 'Remote dsh port',
-        remotePortHint: 'Leave blank to launch and detect automatically.',
+        port: 'SSH port', portPlaceholder: '22',
         remoteStateDir: 'Remote state dir',
         remoteStateDirPlaceholder: '~/.dsh-app-remote',
         remoteStateDirHint: 'Leave blank to use ~/.dsh-app-remote (shared with dsh-go); holds web.cmd/web.pid/web.st/web.log so both implementations reuse one dsh web.',
-        token: 'Remote token', tokenHint: 'Leave blank to read it from the remote log.',
+        settings: 'Settings',
         status_idle: 'Not connected', status_connecting: 'Connecting…',
         status_probing: 'Launching remote dsh web…', status_tunneling: 'Opening tunnel…',
         status_checking: 'Checking remote Harness…', status_connected: 'Connected',
         status_reconnecting: 'Reconnecting…', status_failed: 'Failed',
-        error: 'Error', retry: 'Retry', confirmDelete: 'Delete this host?',
+        online: 'Online', offline: 'Offline', probing: 'Checking…', saveFailed: 'Save failed',
+        error: 'Error', retry: 'Retry',
         configTitle: 'Host', logTitle: 'Connection log',
       },
       zh: {
@@ -38,22 +40,24 @@ window.__ModuleLoader__.load({
         heading: 'SSH 远程主机',
         subheading: '通过 SSH 连接到另一台机器上运行的 DeepSeek Harness。',
         empty: '还没有主机。添加一个开始吧。',
-        add: '添加主机', save: '保存', cancel: '取消', delete: '删除',
+        add: '添加主机', addTitle: '添加主机', editTitle: '修改主机',
+        save: '保存', cancel: '取消', delete: '删除', confirmDelete: '确认删除',
+        deleteWarn: '删除这台主机及其连接？',
         connect: '连接', reconnect: '重连', disconnect: '断开',
         open: '打开远端 Harness', copyUrl: '复制链接', copied: '已复制',
         name: '名称', namePlaceholder: '家里的电脑',
         host: '主机', hostPlaceholder: 'user@example.com 或 ~/.ssh/config 别名',
-        port: 'SSH 端口', remotePort: '远端 dsh 端口',
-        remotePortHint: '留空则自动启动并探测。',
+        port: 'SSH 端口', portPlaceholder: '22',
         remoteStateDir: '远端状态目录',
         remoteStateDirPlaceholder: '~/.dsh-app-remote',
         remoteStateDirHint: '留空则用 ~/.dsh-app-remote（与 dsh-go 共用）；存 web.cmd/web.pid/web.st/web.log，让两套实现复用同一个 dsh web。',
-        token: '远端 token', tokenHint: '留空则从远端日志读取。',
+        settings: '设置',
         status_idle: '未连接', status_connecting: '连接中…',
         status_probing: '正在启动远端 dsh web…', status_tunneling: '正在建立隧道…',
         status_checking: '正在检查远端 Harness…', status_connected: '已连接',
         status_reconnecting: '重连中…', status_failed: '失败',
-        error: '错误', retry: '重试', confirmDelete: '删除这台主机？',
+        online: '在线', offline: '离线', probing: '探测中…', saveFailed: '保存失败',
+        error: '错误', retry: '重试',
         configTitle: '主机', logTitle: '连接日志',
       },
     }
@@ -76,11 +80,11 @@ window.__ModuleLoader__.load({
       reconnecting: 'status_reconnecting', failed: 'status_failed',
     }
 
-    function badgeColor(phase) {
-      if (phase === 'connected') return 'var(--dsw-alias-success, #2ea043)'
-      if (phase === 'failed') return 'var(--dsw-alias-danger, #d1242f)'
-      if (phase && phase !== 'idle') return 'var(--dsw-alias-warning, #bf8700)'
-      return 'var(--dsw-alias-border-l1, #666)'
+    // Online indicator: green=online, red=offline, yellow=probing/unknown.
+    function onlineColor(state) {
+      if (state === 'online') return 'var(--dsw-alias-success, #2ea043)'
+      if (state === 'offline') return 'var(--dsw-alias-danger, #d1242f)'
+      return 'var(--dsw-alias-warning, #bf8700)' // probing / unknown
     }
 
     // ── shared styling ──────────────────────────────────────────────────────
@@ -96,22 +100,31 @@ window.__ModuleLoader__.load({
       .dshsr-btn.primary { background: var(--dsw-alias-accent, #247bbf); border-color: transparent; color: #fff; }
       .dshsr-btn.danger { color: var(--dsw-alias-danger, #d1242f); }
       .dshsr-btn:disabled { opacity: .5; cursor: default; }
-      .dshsr-card { border: 1px solid var(--dsw-alias-border-l1, #444); border-radius: 12px; padding: 14px 16px;
-        margin-bottom: 12px; background: var(--dsw-alias-bg-1, transparent); }
-      .dshsr-row { display: flex; align-items: center; gap: 10px; }
+      .dshsr-card { border: 1px solid var(--dsw-alias-border-l1, #444); border-radius: 12px; padding: 12px 14px;
+        margin-bottom: 10px; background: var(--dsw-alias-bg-1, transparent); }
+      .dshsr-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .dshsr-name { font-weight: 600; }
-      .dshsr-addr { color: var(--dsw-alias-text-2, inherit); opacity: .75; font-size: 12px; font-family: monospace; }
+      .dshsr-addr { color: var(--dsw-alias-text-2, inherit); opacity: .8; font-size: 12px;
+        font-family: monospace; cursor: pointer; border-bottom: 1px dotted transparent; }
+      .dshsr-addr:hover { border-bottom-color: currentColor; }
       .dshsr-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-      .dshsr-status { font-size: 12px; margin-left: 4px; }
+      .dshsr-status { font-size: 12px; margin-left: auto; opacity: .9; white-space: nowrap; }
       .dshsr-spacer { flex: 1; }
-      .dshsr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .dshsr-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .dshsr-iconbtn { border: 1px solid var(--dsw-alias-border-l1, #555); background: var(--dsw-alias-bg-2, transparent);
+        color: inherit; border-radius: 8px; width: 30px; height: 30px; padding: 0; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; flex: none; }
+      .dshsr-iconbtn:hover { background: var(--dsw-alias-bg-3, rgba(128,128,128,.12)); }
       .dshsr-empty { color: var(--dsw-alias-text-2, inherit); opacity: .7; padding: 40px 0; text-align: center; }
-      .dshsr-form { display: grid; grid-template-columns: 140px 1fr; gap: 10px 14px; align-items: center; }
+      .dshsr-form { display: grid; grid-template-columns: 120px 1fr; gap: 12px 14px; align-items: center; }
       .dshsr-form label { font-size: 13px; color: var(--dsw-alias-text-2, inherit); }
       .dshsr-form input { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 8px;
         border: 1px solid var(--dsw-alias-border-l1, #555); background: var(--dsw-alias-bg-2, transparent);
         color: inherit; font-size: 13px; }
-      .dshsr-hint { grid-column: 2; font-size: 12px; opacity: .6; margin-top: -4px; }
+      .dshsr-hostrow { display: flex; gap: 8px; }
+      .dshsr-hostrow input.dshsr-hostinput { flex: 1; min-width: 0; }
+      .dshsr-hostrow input.dshsr-portinput { width: 64px; flex: none; text-align: center; }
+      .dshsr-hint { grid-column: 2; font-size: 12px; opacity: .6; margin-top: -6px; }
       .dshsr-err { color: var(--dsw-alias-danger, #d1242f); font-size: 12px; margin-top: 8px; word-break: break-word; }
       .dshsr-log { font-family: monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word;
         max-height: 160px; overflow: auto; background: var(--dsw-alias-bg-2, rgba(0,0,0,.15));
@@ -120,78 +133,123 @@ window.__ModuleLoader__.load({
       .dshsr-url code { flex: 1; font-size: 11px; overflow: auto; white-space: nowrap; padding: 6px 8px;
         background: var(--dsw-alias-bg-2, rgba(0,0,0,.15)); border-radius: 6px; }
       a.dshsr-link { color: var(--dsw-alias-accent, #247bbf); text-decoration: none; font-weight: 600; }
+      /* modal */
+      .dshsr-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex;
+        align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+      .dshsr-modal { width: 100%; max-width: 460px; background: var(--dsw-alias-bg-0, #1e1e1e);
+        border: 1px solid var(--dsw-alias-border-l1, #444); border-radius: 14px; padding: 18px 20px;
+        box-shadow: 0 12px 40px rgba(0,0,0,.5); max-height: 85vh; overflow: auto;
+        color: var(--dsw-alias-text-1, inherit); }
+      .dshsr-modal-title { font-size: 16px; font-weight: 600; margin: 0 0 16px; }
+      .dshsr-modal-actions { display: flex; gap: 8px; align-items: center; margin-top: 18px; }
+      .dshsr-modal-actions .dshsr-spacer { flex: 1; }
     `
 
-    // ── host form ────────────────────────────────────────────────────────────
-    function HostForm({ t, initial, onCancel, onSave, busy }) {
-      const [name, setName] = useState(initial?.name || '')
-      const [host, setHost] = useState(initial?.host ? (initial.user ? initial.user + '@' + initial.host : initial.host) : '')
-      const [port, setPort] = useState(initial?.port ? String(initial.port) : '22')
-      const [remotePort, setRemotePort] = useState(initial?.remotePort ? String(initial.remotePort) : '')
-      const [remoteStateDir, setRemoteStateDir] = useState(initial?.remoteStateDir && initial.remoteStateDir !== '$HOME/.dsh-app-remote' ? initial.remoteStateDir : '')
-      const [token, setToken] = useState(initial?.token || '')
-      return h('div', { className: 'dshsr-card' },
-        h('div', { className: 'dshsr-form' },
-          h('label', null, t('name')),
-          h('input', { value: name, placeholder: t('namePlaceholder'), onChange: (e) => setName(e.target.value) }),
-          h('label', null, t('host')),
-          h('input', { value: host, placeholder: t('hostPlaceholder'), onChange: (e) => setHost(e.target.value) }),
-          h('label', null, t('port')),
-          h('input', { value: port, inputMode: 'numeric', onChange: (e) => setPort(e.target.value) }),
-          h('label', null, t('remotePort')),
-          h('input', { value: remotePort, inputMode: 'numeric', onChange: (e) => setRemotePort(e.target.value) }),
-          h('div', { className: 'dshsr-hint' }, t('remotePortHint')),
-          h('label', null, t('remoteStateDir')),
-          h('input', { value: remoteStateDir, placeholder: t('remoteStateDirPlaceholder'), onChange: (e) => setRemoteStateDir(e.target.value) }),
-          h('div', { className: 'dshsr-hint' }, t('remoteStateDirHint')),
-          h('label', null, t('token')),
-          h('input', { value: token, onChange: (e) => setToken(e.target.value) }),
-          h('div', { className: 'dshsr-hint' }, t('tokenHint')),
+    // ── form fields (fully controlled by the modal, which owns the state) ─────
+    function HostFormBody({ t, value, setValue }) {
+      const set = (k) => (e) => setValue((v) => ({ ...v, [k]: e.target.value }))
+      return h('div', { className: 'dshsr-form' },
+        h('label', null, t('name')),
+        h('input', { value: value.name, placeholder: t('namePlaceholder'), autoFocus: true, onChange: set('name') }),
+        h('label', null, t('host')),
+        h('div', { className: 'dshsr-hostrow' },
+          h('input', { className: 'dshsr-hostinput', value: value.host, placeholder: t('hostPlaceholder'), onChange: set('host') }),
+          h('input', { className: 'dshsr-portinput', value: value.port, inputMode: 'numeric', placeholder: t('portPlaceholder'), onChange: set('port') }),
         ),
-        h('div', { className: 'dshsr-actions' },
-          h('button', {
-            className: 'dshsr-btn primary', disabled: busy || !host.trim(),
-            onClick: () => onSave({ id: initial?.id, name, host, port, remotePort, remoteStateDir, token }),
-          }, t('save')),
-          h('button', { className: 'dshsr-btn', disabled: busy, onClick: onCancel }, t('cancel')),
+        h('label', null, t('remoteStateDir')),
+        h('input', { value: value.remoteStateDir, placeholder: t('remoteStateDirPlaceholder'), onChange: set('remoteStateDir') }),
+        h('div', { className: 'dshsr-hint' }, t('remoteStateDirHint')),
+      )
+    }
+
+    // ── modal (shared by add + settings) ─────────────────────────────────────
+    function HostModal({ t, initial, busy, error, onClose, onSave, onDelete }) {
+      const isEdit = !!(initial && initial.id)
+      const [confirmDel, setConfirmDel] = useState(false)
+      const [value, setValue] = useState({
+        name: initial?.name || '',
+        host: initial?.host ? (initial.user ? initial.user + '@' + initial.host : initial.host) : '',
+        port: initial?.port ? String(initial.port) : '22',
+        remoteStateDir: initial?.remoteStateDir && initial.remoteStateDir !== '$HOME/.dsh-app-remote' ? initial.remoteStateDir : '',
+      })
+      useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape' && !busy) onClose() }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [busy, onClose])
+      const save = () => onSave({ id: initial?.id, ...value })
+      const canSave = !busy && String(value.host || '').trim().length > 0
+      return h('div', { className: 'dshsr-overlay', onClick: () => { if (!busy) onClose() } },
+        h('div', { className: 'dshsr-modal', onClick: (e) => e.stopPropagation() },
+          h('div', { className: 'dshsr-modal-title' }, isEdit ? t('editTitle') : t('addTitle')),
+          h(HostFormBody, { t, value, setValue }),
+          error ? h('div', { className: 'dshsr-err' }, t('error') + ': ' + error) : null,
+          h('div', { className: 'dshsr-modal-actions' },
+            isEdit
+              ? (confirmDel
+                  ? h('button', { className: 'dshsr-btn danger', disabled: busy, onClick: () => onDelete(initial.id) }, t('confirmDelete'))
+                  : h('button', { className: 'dshsr-btn danger', disabled: busy, onClick: () => setConfirmDel(true) }, t('delete')))
+              : null,
+            confirmDel ? h('span', { className: 'dshsr-status', style: { marginLeft: 0 } }, t('deleteWarn')) : null,
+            h('div', { className: 'dshsr-spacer' }),
+            confirmDel
+              ? h('button', { className: 'dshsr-btn', disabled: busy, onClick: () => setConfirmDel(false) }, t('cancel'))
+              : h('button', { className: 'dshsr-btn', disabled: busy, onClick: onClose }, t('cancel')),
+            h('button', { className: 'dshsr-btn primary', disabled: !canSave, onClick: save }, t('save')),
+          ),
         ),
       )
     }
 
-    // ── host card ────────────────────────────────────────────────────────────
-    function HostCard({ t, host, onConnect, onDisconnect, onDelete, onEdit, copy }) {
+    // ── host card (single row) ───────────────────────────────────────────────
+    function GearIcon() {
+      return h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', 'aria-hidden': true },
+        h('circle', { cx: 12, cy: 12, r: 3.2, stroke: 'currentColor', strokeWidth: 1.8 }),
+        h('path', {
+          d: 'M19.4 13a7.4 7.4 0 0 0 0-2l1.9-1.4-1.9-3.3-2.3.9a7.2 7.2 0 0 0-1.7-1L15 3.5h-3.9l-.4 2.6a7.2 7.2 0 0 0-1.7 1l-2.3-.9L4.8 9.6 6.6 11a7.4 7.4 0 0 0 0 2l-1.8 1.4 1.9 3.3 2.3-.9a7.2 7.2 0 0 0 1.7 1l.4 2.6H15l.4-2.6a7.2 7.2 0 0 0 1.7-1l2.3.9 1.9-3.3z',
+          stroke: 'currentColor', strokeWidth: 1.5, strokeLinejoin: 'round',
+        }),
+      )
+    }
+
+    function HostCard({ t, host, online, onConnect, onDisconnect, onEdit, copy }) {
       const status = host.status || { phase: 'idle' }
       const phase = status.phase
       const busy = phase === 'connecting' || phase === 'probing' || phase === 'tunneling' ||
         phase === 'checking' || phase === 'reconnecting'
+      // Online state: connected forces green (connection proves reachability);
+      // otherwise use the last probe result; unknown/probing -> yellow.
+      let onlineState = online // 'online' | 'offline' | undefined (probing/unknown)
+      if (phase === 'connected') onlineState = 'online'
+      const onlineTitle = onlineState === 'online' ? t('online')
+        : onlineState === 'offline' ? t('offline') : t('probing')
+      const connected = phase === 'connected' && status.url
       return h('div', { className: 'dshsr-card' },
         h('div', { className: 'dshsr-row' },
-          h('span', { className: 'dshsr-dot', style: { background: badgeColor(phase) } }),
+          h('span', { className: 'dshsr-dot', style: { background: onlineColor(onlineState) }, title: onlineTitle }),
           h('span', { className: 'dshsr-name' }, host.name),
-          h('span', { className: 'dshsr-addr' }, host.address + (host.remotePort ? ' · remote:' + host.remotePort : '')),
-          h('span', { className: 'dshsr-spacer' }),
+          h('span', {
+            className: 'dshsr-addr', title: t('copyUrl'),
+            onClick: () => copy(host.address),
+          }, host.address),
           h('span', { className: 'dshsr-status' }, t(STATUS_KEY[phase] || 'status_idle')),
+          connected
+            ? h('a', { className: 'dshsr-link', href: status.url, target: '_blank', rel: 'noopener' }, t('open'))
+            : null,
+          h('div', { className: 'dshsr-actions' },
+            connected
+              ? h('button', { className: 'dshsr-btn', onClick: () => onDisconnect(host.id) }, t('disconnect'))
+              : h('button', {
+                  className: 'dshsr-btn primary', disabled: busy,
+                  onClick: () => onConnect(host.id),
+                }, phase === 'failed' || phase === 'reconnecting' ? t('retry') : t('connect')),
+            h('button', {
+              className: 'dshsr-iconbtn', title: t('settings'), 'aria-label': t('settings'),
+              onClick: () => onEdit(host),
+            }, h(GearIcon)),
+          ),
         ),
-        phase === 'connected' && status.url
-          ? h('div', { className: 'dshsr-url' },
-              h('code', null, status.url),
-              h('button', { className: 'dshsr-btn primary', onClick: () => window.open(status.url, '_blank', 'noopener') }, t('open')),
-              h('button', { className: 'dshsr-btn', onClick: () => copy(status.url) }, t('copyUrl')),
-            )
-          : null,
-        status.error
-          ? h('div', { className: 'dshsr-err' }, t('error') + ': ' + status.error)
-          : null,
-        h('div', { className: 'dshsr-actions' },
-          phase === 'connected'
-            ? h('button', { className: 'dshsr-btn', onClick: () => onDisconnect(host.id) }, t('disconnect'))
-            : h('button', {
-                className: 'dshsr-btn primary', disabled: busy,
-                onClick: () => onConnect(host.id),
-              }, phase === 'failed' || phase === 'reconnecting' ? t('retry') : t('connect')),
-          h('button', { className: 'dshsr-btn', onClick: () => onEdit(host) }, t('configTitle')),
-          h('button', { className: 'dshsr-btn danger', onClick: () => onDelete(host) }, t('delete')),
-        ),
+        status.error ? h('div', { className: 'dshsr-err' }, t('error') + ': ' + status.error) : null,
       )
     }
 
@@ -201,8 +259,11 @@ window.__ModuleLoader__.load({
       const [editing, setEditing] = useState(null) // { ...host } | 'new' | null
       const [log, setLog] = useState([])
       const [busy, setBusy] = useState(false)
+      const [modalError, setModalError] = useState(null)
       const [copied, setCopied] = useState(false)
+      const [online, setOnline] = useState({}) // id -> 'online' | 'offline'
       const esRef = useRef(null)
+      const visibleRef = useRef(true)
 
       const refresh = useCallback(async () => {
         try {
@@ -211,8 +272,18 @@ window.__ModuleLoader__.load({
         } catch (e) { /* ignore transient */ }
       }, [])
 
+      const probe = useCallback(async () => {
+        try {
+          const data = await api('GET', '/probe')
+          const map = {}
+          for (const [id, ok] of Object.entries(data.online || {})) map[id] = ok ? 'online' : 'offline'
+          setOnline(map)
+        } catch (e) { /* ignore transient */ }
+      }, [])
+
       useEffect(() => {
         refresh()
+        probe()
         const es = new EventSource(ROUTE + '/events')
         esRef.current = es
         es.onmessage = (ev) => {
@@ -226,19 +297,38 @@ window.__ModuleLoader__.load({
         }
         es.onerror = () => { /* browser auto-reconnects */ }
         return () => { es.close(); esRef.current = null }
-      }, [refresh])
+      }, [refresh, probe])
 
-      const copy = (url) => {
+      // Poll reachability every 30s while the panel is visible; pause when hidden.
+      useEffect(() => {
+        const tick = () => { if (visibleRef.current && document.visibilityState === 'visible') probe() }
+        const onVis = () => { visibleRef.current = document.visibilityState === 'visible'; if (visibleRef.current) probe() }
+        document.addEventListener('visibilitychange', onVis)
+        const timer = setInterval(tick, 30000)
+        return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVis) }
+      }, [probe])
+
+      const copy = (text) => {
         try {
-          navigator.clipboard.writeText(url)
+          navigator.clipboard.writeText(text)
           setCopied(true); setTimeout(() => setCopied(false), 1500)
         } catch (e) { /* ignore */ }
       }
 
+      const openNew = () => { setModalError(null); setEditing('new') }
+      const openEdit = (h0) => { setModalError(null); setEditing(h0) }
+      const closeModal = () => { if (!busy) { setEditing(null); setModalError(null) } }
+
       const save = async (value) => {
-        setBusy(true)
-        try { await api('POST', '/hosts', value); setEditing(null); await refresh() }
-        catch (e) { console.error(e) }
+        setBusy(true); setModalError(null)
+        try { await api('POST', '/hosts', value); setEditing(null); await refresh(); probe() }
+        catch (e) { setModalError(String(e && e.message ? e.message : e)) }
+        finally { setBusy(false) }
+      }
+      const removeFromModal = async (id) => {
+        setBusy(true); setModalError(null)
+        try { await api('DELETE', '/hosts/' + id); setEditing(null); await refresh(); probe() }
+        catch (e) { setModalError(String(e && e.message ? e.message : e)) }
         finally { setBusy(false) }
       }
 
@@ -251,11 +341,6 @@ window.__ModuleLoader__.load({
         try { await api('POST', '/hosts/' + id + '/disconnect'); await refresh() }
         catch (e) { console.error(e) }
       }
-      const remove = async (host) => {
-        if (!window.confirm(t('confirmDelete'))) return
-        try { await api('DELETE', '/hosts/' + host.id); await refresh() }
-        catch (e) { console.error(e) }
-      }
 
       return h('div', { className: 'dshsr-root' },
         h('style', null, CSS),
@@ -264,27 +349,19 @@ window.__ModuleLoader__.load({
           h('button', {
             className: 'dshsr-btn primary',
             disabled: editing !== null,
-            onClick: () => setEditing('new'),
+            onClick: openNew,
           }, '+ ' + t('add')),
         ),
         h('p', { className: 'dshsr-sub' }, t('subheading')),
-        editing === 'new'
-          ? h(HostForm, { t, initial: null, busy, onCancel: () => setEditing(null), onSave: save })
-          : null,
-        editing && editing !== 'new'
-          ? h(HostForm, { t, initial: editing, busy, onCancel: () => setEditing(null), onSave: save })
-          : null,
         hosts.length === 0 && editing === null
           ? h('div', { className: 'dshsr-empty' }, t('empty'))
           : null,
         hosts.map((host) =>
-          editing && editing !== 'new' && editing.id === host.id
-            ? null
-            : h(HostCard, {
-                key: host.id, t, host, copy,
-                onConnect: connect, onDisconnect: disconnect,
-                onDelete: remove, onEdit: (hh) => setEditing(hh),
-              }),
+          h(HostCard, {
+            key: host.id, t, host, online: online[host.id], copy,
+            onConnect: connect, onDisconnect: disconnect,
+            onEdit: (hh) => openEdit(hh),
+          }),
         ),
         log.length
           ? h('div', null,
@@ -292,8 +369,26 @@ window.__ModuleLoader__.load({
               h('div', { className: 'dshsr-log' }, log.join('\n')),
             )
           : null,
+        editing !== null
+          ? h(HostModal, {
+              t, busy, error: modalError,
+              initial: editing === 'new' ? null : editing,
+              onClose: closeModal, onSave: save, onDelete: removeFromModal,
+            })
+          : null,
+        copied
+          ? h('div', {
+              style: {
+                position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+                background: 'var(--dsw-alias-bg-0, #1e1e1e)', color: 'inherit',
+                border: '1px solid var(--dsw-alias-border-l1, #444)', borderRadius: 8,
+                padding: '6px 14px', fontSize: 12, zIndex: 1001,
+              },
+            }, t('copied'))
+          : null,
       )
     }
+
 
     function PanelIcon({ active, size }) {
       const s = size || 20

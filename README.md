@@ -5,16 +5,20 @@
 ## 使用
 
 1. 侧栏出现「远程主机」图标（`sidebar.panellist`，order 20），点击打开面板。
-2. 「添加主机」填入 `名称`、`主机`（`user@host` 或 `~/.ssh/config` 别名）、`SSH 端口`。
-   - `远端 dsh 端口`、`远端 token` 留空即可：插件会 SSH 上去启动一个受管的远端 `dsh web` 并从日志读取端口与 token。
+2. 点「添加主机」打开弹窗，填入 `名称`、`主机`（`user@host` 或 `~/.ssh/config` 别名）、`SSH 端口`（默认 22，紧贴主机框右侧；也可直接写进 `user@host:端口`，显式端口框优先）。
+   - 远端端口与 token **无需填写**：插件固定 SSH 上去启动/复用受管的远端 `dsh web`，并从日志自动读取端口与 token。
    - `远端状态目录` 留空则为 `~/.dsh-app-remote`（**与 dsh-go 共用**）；可填绝对路径、`~`/`$HOME` 开头或相对路径（相对远端 `$HOME`）。插件在该目录存 `web.cmd / web.pid / web.st / web.log`，与 dsh-go 互相复用同一个 `dsh web`（见 [ADR-0004](docs/adr/0004-share-dsh-go-state-dir.md)）。
 3. 点「连接」。面板显示 `连接中 → 启动远端 dsh web… → 建立隧道… → 检查远端 Harness… → 已连接`。
-4. 连接成功后出现「打开远端 Harness」按钮，点开新标签页即进入远端那台 DSH（`http://127.0.0.1:<本地隧道口>/?token=…`）。
+4. 连接成功后卡片出现「打开远端 Harness」链接，点开新标签页即进入远端那台 DSH（`http://127.0.0.1:<本地隧道口>/?token=…`）。
+5. 每台主机名称前的圆点表示**在线状态**（TCP 探测 `主机:SSH端口`）：绿=在线、红=离线、黄=探测中；面板可见时每 30s 刷新，切走标签页即暂停。
+6. 卡片右侧的 ⚙ 打开「修改主机」弹窗，删除也在该弹窗内完成（内联二次确认）。点击卡片上的 `user@host` 可复制地址。
+
+> 配置字段 `远端 token` / `远端 dsh 端口` 已在 0.2.0 移除，旧 `hosts.json` 中残留的同名字段会被忽略（见 [ADR-0005](docs/adr/0005-remove-manual-token-port-and-online-probe.md)）。
 
 ## 工作流程（对应参照的 SSH 分析流程）
 
 1. **connect**：`ssh -L 127.0.0.1:<localPort>:127.0.0.1:<remotePort>`（`ExitOnForwardFailure`、`ServerAliveInterval=15`）。
-2. **probe/own**：若未配置远端端口，SSH 执行引导脚本（非登录 `sh`，脚本自行为用户级 bin 目录补齐 PATH，见 [ADR-0003](docs/adr/0003-non-login-shell-path.md)），在远端**状态目录**（默认 `$HOME/.dsh-app-remote/`，与 dsh-go 共用，可按主机配置）记录 `web.pid/web.st/web.cmd/web.log`，`dsh web --host 127.0.0.1 --port 0 --no-open` 启动，读日志首行 `…/?token=`。可复用则复用（含 dsh-go 启动的实例）。
+2. **probe/own**：SSH 执行引导脚本（非登录 `sh`，脚本自行为用户级 bin 目录补齐 PATH，见 [ADR-0003](docs/adr/0003-non-login-shell-path.md)），在远端**状态目录**（默认 `$HOME/.dsh-app-remote/`，与 dsh-go 共用，可按主机配置）记录 `web.pid/web.st/web.cmd/web.log`，`dsh web --host 127.0.0.1 --port 0 --no-open` 启动，读日志首行 `…/?token=`。可复用则复用（含 dsh-go 启动的实例）。远端端口/token 一律由此自动获得。
 3. **tunnel**：本地固定端口转发到远端回环端口。
 4. **check**：经隧道 HTTP 根路径，`401/303/200` 视为可达。
 5. **keepalive**：每 15s 健康检查；断线指数退避重连。

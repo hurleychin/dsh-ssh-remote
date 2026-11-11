@@ -6,12 +6,12 @@
  *
  *   1. connect   — spawn `ssh` (own ControlMaster-free connection) with a
  *                  loopback `-L` forward (local ephemeral port -> remote dsh port).
- *   2. probe/own — if the configured remote port/token are blank, SSH in,
- *                  start `dsh web --host 127.0.0.1 --port 0 --no-open` (its
- *                  stdout captured to a per-host remote log), and read the
+ *   2. probe/own — SSH in, start `dsh web --host 127.0.0.1 --port 0 --no-open`
+ *                  (its stdout captured to a per-host remote log), and read the
  *                  `dsh web: http://127.0.0.1:<port>/?token=...` line. The
  *                  remote pid/start-time/log live in remote state files so a
- *                  later connect can reuse the instance we started.
+ *                  later connect can reuse the instance we started. The remote
+ *                  port and token are never user-configured—always read here.
  *   3. tunnel    — keep the `-L` forward alive on a fixed local port.
  *   4. check     — HTTP the tunnel root; 401/303/200 means the remote DSH is
  *                  reachable, connection refused means it is not.
@@ -24,6 +24,7 @@
  * plugin over same-origin `/dsh-ssh-remote/*` routes.
  */
 import { request as httpRequest } from 'node:http'
+import { Socket } from 'node:net'
 import { randomBytes } from 'node:crypto'
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -91,8 +92,9 @@ function normalizeHost(input) {
     user: user,
     port: port || 22,
     address: user ? `${user}@${host}` : host,
-    remotePort: Number.isFinite(+input.remotePort) && +input.remotePort > 0 ? +input.remotePort : 0,
-    token: String(input.token || '').trim(),
+    // `remotePort` and `token` are no longer user-configurable: the plugin always
+    // launch-and-owns a remote `dsh web` and reads its port+token from the remote
+    // log. Old hosts.json entries may still carry them; we ignore/skip them here.
     // Remote state dir: where the plugin stores web.cmd / web.pid / web.st /
     // web.log on the remote. Interpreted by the remote shell; blank means the
     // default ~/.dsh-app-remote (shared with dsh-go so instances are reusable
@@ -175,6 +177,49 @@ class SshRemoteService {
     const rec = this.records.get(id)
     if (!rec) return { phase: 'idle' }
     return { phase: rec.phase, error: rec.error, url: rec.url, localPort: rec.localPort }
+  }
+
+  /**
+   * TCP-reachability probe for the "online" indicator. Opens a short-lived
+   * socket to `<host>:<port>`; resolves true on connect, false on error/timeout.
+   * TCP is used instead of ICMP `ping` because browsers can't ICMP, it needs no
+   * subprocess/output parsing, behaves identically across platforms, and it
+   * actually tests whether the host's SSH port is reachable (not just routable).
+   */
+  _probeOne(host, timeoutMs = 3500) {
+    return new Promise((resolve) => {
+      let done = false
+      const finish = (ok) => {
+        if (done) return
+        done = true
+        try { socket.destroy() } catch { /* ignore */ }
+        resolve(ok)
+      }
+      let socket
+      try {
+        socket = new Socket()
+      } catch {
+        return resolve(false)
+      }
+      socket.setTimeout(timeoutMs)
+      socket.once('connect', () => finish(true))
+      socket.once('timeout', () => finish(false))
+      socket.once('error', () => finish(false))
+      try {
+        socket.connect(host.port || 22, host.host)
+      } catch {
+        finish(false)
+      }
+    })
+  }
+
+  /** Probe every host concurrently; returns { id: boolean }. */
+  async probeHosts() {
+    await this.readyPromise
+    const entries = await Promise.all(
+      this.hosts.map(async (h) => [h.id, await this._probeOne(h)]),
+    )
+    return Object.fromEntries(entries)
   }
 
 
@@ -282,17 +327,13 @@ class SshRemoteService {
     rec.error = null
     this._setPhase(rec, 'connecting')
 
-    // 1. Resolve the remote dsh endpoint (port + token). If not configured,
-    //    launch-and-own a remote `dsh web` and read its log.
-    let remotePort = host.remotePort
-    let token = host.token
-    if (!remotePort) {
-      this._setPhase(rec, 'probing')
-      const endpoint = await this._ensureRemoteDsh(rec)
-      remotePort = endpoint.port
-      token = endpoint.token || token
-    }
-    if (!token) throw new Error('no token: set one on the host or leave remote port blank so it can be read from the remote log')
+    // 1. Always launch-and-own the remote `dsh web` and read its port+token from
+    //    the remote log. There is no manual remote-port/token config anymore.
+    this._setPhase(rec, 'probing')
+    const endpoint = await this._ensureRemoteDsh(rec)
+    const remotePort = endpoint.port
+    const token = endpoint.token
+    if (!remotePort || !token) throw new Error('remote dsh web did not report a port/token')
 
     // 2. Local port for the forwarder (stable across reconnects while the rec lives).
     if (!rec.localPort) rec.localPort = 47000 + Math.floor(Math.random() * 1500)
@@ -619,6 +660,9 @@ export function apply(ctx, config) {
         try {
           if (req.method === 'GET' && req.url === ROUTE + '/hosts') {
             return sendJson(res, 200, { hosts: service.listHosts() })
+          }
+          if (req.method === 'GET' && req.url === ROUTE + '/probe') {
+            return sendJson(res, 200, { online: await service.probeHosts() })
           }
           if (req.method === 'GET' && req.url === ROUTE + '/events') {
             res.writeHead(200, {
