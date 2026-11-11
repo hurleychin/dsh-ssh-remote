@@ -18,7 +18,7 @@
 4. **check**：经隧道 HTTP 根路径，`401/303/200` 视为可达。
 5. **keepalive**：每 15s 健康检查；断线指数退避重连。
 
-详见 [GLOSSARY.md](../../GLOSSARY.md) 与 [docs/adr/](../../docs/adr/)。
+详见 [GLOSSARY.md](GLOSSARY.md) 与 [docs/adr/](docs/adr/)。
 
 ## 结构
 
