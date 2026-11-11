@@ -23,8 +23,8 @@ window.__ModuleLoader__.load({
         port: 'SSH port', remotePort: 'Remote dsh port',
         remotePortHint: 'Leave blank to launch and detect automatically.',
         remoteStateDir: 'Remote state dir',
-        remoteStateDirPlaceholder: '~/.dsh-ssh-remote',
-        remoteStateDirHint: 'Leave blank to use ~/.dsh-ssh-remote; holds web.cmd/web.pid/web.log for reusing a launched instance.',
+        remoteStateDirPlaceholder: '~/.dsh-app-remote',
+        remoteStateDirHint: 'Leave blank to use ~/.dsh-app-remote (shared with dsh-go); holds web.cmd/web.pid/web.st/web.log so both implementations reuse one dsh web.',
         token: 'Remote token', tokenHint: 'Leave blank to read it from the remote log.',
         status_idle: 'Not connected', status_connecting: 'Connecting…',
         status_probing: 'Launching remote dsh web…', status_tunneling: 'Opening tunnel…',
@@ -46,8 +46,8 @@ window.__ModuleLoader__.load({
         port: 'SSH 端口', remotePort: '远端 dsh 端口',
         remotePortHint: '留空则自动启动并探测。',
         remoteStateDir: '远端状态目录',
-        remoteStateDirPlaceholder: '~/.dsh-ssh-remote',
-        remoteStateDirHint: '留空则用 ~/.dsh-ssh-remote；存 web.cmd/web.pid/web.log，用于复用已启动实例。',
+        remoteStateDirPlaceholder: '~/.dsh-app-remote',
+        remoteStateDirHint: '留空则用 ~/.dsh-app-remote（与 dsh-go 共用）；存 web.cmd/web.pid/web.st/web.log，让两套实现复用同一个 dsh web。',
         token: '远端 token', tokenHint: '留空则从远端日志读取。',
         status_idle: '未连接', status_connecting: '连接中…',
         status_probing: '正在启动远端 dsh web…', status_tunneling: '正在建立隧道…',
@@ -128,7 +128,7 @@ window.__ModuleLoader__.load({
       const [host, setHost] = useState(initial?.host ? (initial.user ? initial.user + '@' + initial.host : initial.host) : '')
       const [port, setPort] = useState(initial?.port ? String(initial.port) : '22')
       const [remotePort, setRemotePort] = useState(initial?.remotePort ? String(initial.remotePort) : '')
-      const [remoteStateDir, setRemoteStateDir] = useState(initial?.remoteStateDir && initial.remoteStateDir !== '$HOME/.dsh-ssh-remote' ? initial.remoteStateDir : '')
+      const [remoteStateDir, setRemoteStateDir] = useState(initial?.remoteStateDir && initial.remoteStateDir !== '$HOME/.dsh-app-remote' ? initial.remoteStateDir : '')
       const [token, setToken] = useState(initial?.token || '')
       return h('div', { className: 'dshsr-card' },
         h('div', { className: 'dshsr-form' },

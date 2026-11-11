@@ -34,8 +34,13 @@ export const inject = ['subprocess', 'webServer']
 
 const ROUTE = '/dsh-ssh-remote'
 
-/** Per-host remote state directory (mirrors dsh-go's ~/.dsh-app-remote). */
-const REMOTE_STATE_DIR = '$HOME/.dsh-ssh-remote'
+/**
+ * Default per-host remote state directory: dsh-go's own `~/.dsh-app-remote`.
+ * dsh-go hard-codes this path for its probe, so sharing it (and writing
+ * web.pid/web.st, see `_bootstrapScript`) is what lets the two implementations
+ * reuse each other's `dsh web` instead of each starting one.
+ */
+const REMOTE_STATE_DIR = '$HOME/.dsh-app-remote'
 const TAG = 'DSHSSH'
 
 const DEFAULT_REMOTE_PORT = 0
@@ -88,10 +93,11 @@ function normalizeHost(input) {
     address: user ? `${user}@${host}` : host,
     remotePort: Number.isFinite(+input.remotePort) && +input.remotePort > 0 ? +input.remotePort : 0,
     token: String(input.token || '').trim(),
-    // Remote state dir: where the plugin stores web.cmd / web.pid / web.log on
-    // the remote. Interpreted by the remote shell; blank means the default
-    // ~/.dsh-ssh-remote. See ADR-0001.
-    remoteStateDir: String(input.remoteStateDir || '').trim() || '$HOME/.dsh-ssh-remote',
+    // Remote state dir: where the plugin stores web.cmd / web.pid / web.st /
+    // web.log on the remote. Interpreted by the remote shell; blank means the
+    // default ~/.dsh-app-remote (shared with dsh-go so instances are reusable
+    // in both directions). See ADR-0001 / ADR-0004.
+    remoteStateDir: String(input.remoteStateDir || '').trim() || REMOTE_STATE_DIR,
     createdAt: input.createdAt || now(),
   }
 }
@@ -409,7 +415,7 @@ class SshRemoteService {
     // text reaches the remote verbatim; the remote shell then expands a leading
     // `~` / `$HOME` / relative form against the remote home (see `resolve_dir`).
     // Blank falls back to the default. Never interpolate the raw value unquoted.
-    const raw = String(stateDir || '').trim() || '$HOME/.dsh-ssh-remote'
+    const raw = String(stateDir || '').trim() || REMOTE_STATE_DIR
     return [
       'set -u',
       'DSR=' + shQuote(raw),
@@ -439,18 +445,52 @@ class SshRemoteService {
       'same_cmd() { [ "$(cat "$D/web.cmd" 2>/dev/null)" = "dsh web" ]; }',
       'emit_url() { grep -aoE "https?://[^ ]*\\?token=[A-Za-z0-9_-]+" "$D/web.log" 2>/dev/null | tail -n 1; }',
       'reachable() { u=$(emit_url); [ -n "$u" ] || return 1; c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "$u" 2>/dev/null); [ "$c" = "401" ] || [ "$c" = "200" ] || [ "$c" = "303" ]; }',
+      // Process start time (Linux: field 22 of /proc/<pid>/stat; else ps lstart).
+      // Byte-identical to dsh-go's _st() so a shared state dir stays compatible:
+      // dsh-go's `ours()` requires web.pid alive AND web.st matching this value.
+      '_st() {',
+      '  if [ -r "/proc/$1/stat" ]; then',
+      '    S=$(cat "/proc/$1/stat" 2>/dev/null) || return 1',
+      '    S=${S##*) }',
+      '    set -- $S',
+      '    [ "$#" -ge 20 ] || return 1',
+      '    shift 19',
+      '    printf "%s\\n" "$1"',
+      '  else',
+      '    ps -p "$1" -o lstart= 2>/dev/null',
+      '  fi',
+      '}',
       'if same_cmd && reachable; then',
+      // Reusing an instance owned by us or by dsh-go: never touch web.pid/web.st,
+      // they belong to whoever launched it.
       '  emit_url | sed "s/^/' + T + ' url /"; exit 0',
       'fi',
-      '# Not reusable: best-effort stop of the old instance, then start fresh.',
-      'if same_cmd; then P=$(cat "$D/web.pid" 2>/dev/null || true); [ -n "${P:-}" ] && { kill "$P" 2>/dev/null; sleep 1; kill -9 "$P" 2>/dev/null; }; fi',
-      'rm -f "$D/web.pid"',
+      'if same_cmd; then',
+      // Best-effort stop of the old instance we started. Only trust web.pid when
+      // it is still our process (dead pids get recycled after reboot).
+      '  P=$(cat "$D/web.pid" 2>/dev/null || true)',
+      '  if [ -n "${P:-}" ]; then',
+      '    if [ -f "$D/web.st" ]; then',
+      '      A=$(_st "$P") 2>/dev/null || A=""',
+      '      B=$(cat "$D/web.st" 2>/dev/null) || B=""',
+      '      [ -n "$A" ] && [ "$A" = "$B" ] && { kill "$P" 2>/dev/null; sleep 1; kill -9 "$P" 2>/dev/null; }',
+      '    else',
+      '      kill "$P" 2>/dev/null; sleep 1; kill -9 "$P" 2>/dev/null',
+      '    fi',
+      '  fi',
+      'fi',
       'if ! command -v dsh >/dev/null 2>&1; then printf "' + T + ' nodsh\\n"; exit 127; fi',
       'printf "%s" "dsh web" > "$D/web.cmd"',
       ': > "$D/web.log"',
       'NO_COLOR=1; export NO_COLOR',
       'N=""; if command -v nohup >/dev/null 2>&1; then N=nohup; fi',
-      '( $N dsh web --host 127.0.0.1 --port 0 --no-open </dev/null >>"$D/web.log" 2>&1 & )',
+      // Start in the background WITHOUT a wrapping subshell so $! is the real
+      // dsh web pid; record web.pid + web.st so a shared dir (dsh-go's
+      // ~/.dsh-app-remote) is reusable by dsh-go's probe as well as by us.
+      '$N dsh web --host 127.0.0.1 --port 0 --no-open </dev/null >>"$D/web.log" 2>&1 &',
+      'P=$!',
+      '_st "$P" > "$D/web.st" 2>/dev/null',
+      'printf "%s\\n" "$P" > "$D/web.pid"',
       'i=0',
       'while [ $i -lt 60 ]; do',
       '  L=$(emit_url)',
