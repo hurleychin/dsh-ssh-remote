@@ -3,5 +3,5 @@
 # loopback port here, hand the browser an authenticated URL).
 - insert:
     - id: ssh-remote
-      name: '@local/dsh-ssh-remote'
+      name: '@hurleychin/dsh-ssh-remote'
       config: {}

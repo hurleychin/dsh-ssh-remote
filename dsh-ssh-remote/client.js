@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@local/dsh-ssh-remote',
+  id: '@hurleychin/dsh-ssh-remote',
   factory(require) {
     const React = require('react')
     const h = React.createElement

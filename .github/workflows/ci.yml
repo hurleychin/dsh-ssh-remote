@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax check
+        working-directory: dsh-ssh-remote
+        run: |
+          node --check index.js
+          node --check client.js
+
+      - name: Validate package manifest
+        working-directory: dsh-ssh-remote
+        run: node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json OK')"
+
+      - name: Validate JSON resources
+        working-directory: dsh-ssh-remote
+        run: |
+          node -e "for (const f of ['locale/en.json','locale/zh.json']) JSON.parse(require('fs').readFileSync(f,'utf8')); console.log('locale OK')"
+
+      - name: Pack dry-run (publishable file list)
+        working-directory: dsh-ssh-remote
+        run: npm pack --dry-run

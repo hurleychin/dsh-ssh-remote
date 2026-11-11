@@ -1,9 +1,27 @@
 {
-  "name": "@local/dsh-ssh-remote",
+  "name": "@hurleychin/dsh-ssh-remote",
   "version": "0.1.0",
-  "private": true,
+  "description": "Connect this DeepSeek Harness to the DSH on another host over SSH: launch or reuse a remote dsh web, tunnel its port here, and open it in a new tab.",
   "type": "module",
-  "description": "Connect this DeepSeek Harness to the DSH on another host over SSH.",
+  "license": "MIT",
+  "author": "hurleychin <qinhulin@gmail.com>",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "ssh",
+    "remote-development"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hurleychin/dsh-ssh-remote.git",
+    "directory": "dsh-ssh-remote"
+  },
+  "bugs": {
+    "url": "https://github.com/hurleychin/dsh-ssh-remote/issues"
+  },
+  "homepage": "https://github.com/hurleychin/dsh-ssh-remote#readme",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -15,8 +33,16 @@
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
-    "icon.svg"
+    "icon.svg",
+    "README.md"
   ],
+  "scripts": {
+    "check": "node --check index.js && node --check client.js",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": {
