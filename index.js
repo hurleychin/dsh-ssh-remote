@@ -404,6 +404,13 @@ class SshRemoteService {
       'set -u',
       'D="$HOME/.dsh-ssh-remote"',
       'mkdir -p "$D" 2>/dev/null; chmod 700 "$D" 2>/dev/null',
+      // Non-interactive, non-login `sh` (what `ssh host "sh -s"` gives us) does
+      // NOT source ~/.profile or ~/.bashrc, so a `dsh` installed under a
+      // user-level bin dir (e.g. `~/.local/bin/dsh`, the standard
+      // `npm i -g --prefix ~/.local` / pipx-style location) is invisible to
+      // `command -v dsh`. Prepend the usual user bin dirs so launch-and-own
+      // works without the user having to wire PATH into a non-login shell.
+      'for d in "$HOME/.local/bin" "$HOME/.opencode/bin" "$HOME/.cargo/bin" "$HOME/.deno/bin" "$HOME/bin"; do [ -d "$d" ] && PATH="$d:$PATH"; done; export PATH',
       'same_cmd() { [ "$(cat "$D/web.cmd" 2>/dev/null)" = "dsh web" ]; }',
       'emit_url() { grep -aoE "https?://[^ ]*\\?token=[A-Za-z0-9_-]+" "$D/web.log" 2>/dev/null | tail -n 1; }',
       'reachable() { u=$(emit_url); [ -n "$u" ] || return 1; c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "$u" 2>/dev/null); [ "$c" = "401" ] || [ "$c" = "200" ] || [ "$c" = "303" ]; }',

@@ -15,6 +15,7 @@
 - **健康检查（health check）**：经隧道 HTTP `GET http://127.0.0.1:<localPort>/`；返回 `401/303/200` 视为「远端 DSH 可达」，`ECONNREFUSED/timeout` 视为不可达。
 - **连接阶段（phase）**：`idle → connecting → probing → tunneling → checking → connected → reconnecting → failed` 的状态机。
 - **可复用（reusable）**：远端 `web.cmd` 与 `dsh web` 一致，且远端日志中的最新 URL 经 `curl` 仍返回 `401/200/303`。复用判定基于 HTTP 而非 pid 存活，因为 MINGW/Windows 下后台子进程的 shell pid 跨 SSH 会话不可靠。
+- **引导脚本（bootstrap script）**：`_bootstrapScript()` 生成、经 `ssh <address> 'sh -s'` 在远端执行的 POSIX `sh` 脚本。它运行在**非交互、非登录** shell 中，不读 `~/.profile` / `~/.bashrc`，因此脚本自行把用户级 bin 目录（`~/.local/bin` 等）前置进 PATH，以免 `dsh` 装在 `~/.local/bin` 时找不到（见 ADR-0003）。
 
 ## 非术语（避免混用）
 

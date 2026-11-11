@@ -13,7 +13,7 @@
 ## 工作流程（对应参照的 SSH 分析流程）
 
 1. **connect**：`ssh -L 127.0.0.1:<localPort>:127.0.0.1:<remotePort>`（`ExitOnForwardFailure`、`ServerAliveInterval=15`）。
-2. **probe/own**：若未配置远端端口，SSH 执行引导脚本，在远端 `$HOME/.dsh-ssh-remote/` 记录 `web.pid/web.cmd/web.log`，`dsh web --host 127.0.0.1 --port 0 --no-open` 启动，读日志首行 `…/?token=`。可复用则复用。
+2. **probe/own**：若未配置远端端口，SSH 执行引导脚本（非登录 `sh`，脚本自行为用户级 bin 目录补齐 PATH，见 [ADR-0003](docs/adr/0003-non-login-shell-path.md)），在远端 `$HOME/.dsh-ssh-remote/` 记录 `web.pid/web.cmd/web.log`，`dsh web --host 127.0.0.1 --port 0 --no-open` 启动，读日志首行 `…/?token=`。可复用则复用。
 3. **tunnel**：本地固定端口转发到远端回环端口。
 4. **check**：经隧道 HTTP 根路径，`401/303/200` 视为可达。
 5. **keepalive**：每 15s 健康检查；断线指数退避重连。
@@ -29,6 +29,12 @@
 ## 依赖的 Host Service
 
 `subprocess`（spawn `ssh`）、`webServer`（注册路由）。无需 `ctx.ssh`（本 profile 未提供）。
+
+## 排查：连不上
+
+- **`remote: 'dsh' not found on PATH`**：远端其实已装 `dsh`，但本插件的引导脚本用的是**非交互、非登录 `sh`**（`ssh host 'sh -s'`），它不读 `~/.profile` / `~/.bashrc`。若 `dsh` 装在 `~/.local/bin` 等用户级目录，请确认引导脚本能看见它——插件已自动把 `~/.local/bin`、`~/.opencode/bin`、`~/.cargo/bin`、`~/.deno/bin`、`~/bin` 前置进 PATH（见 [ADR-0003](docs/adr/0003-non-login-shell-path.md)）。可用 `ssh host 'sh -c "command -v dsh"'` 自检（注意与 `bash -lc` 结果可能不同）。
+- **卡在 `重连中…`**：多为上述 PATH 问题的表象（每次重试都因找不到 `dsh` 失败）；也可能是 SSH 免密/密钥未配好、远端端口被占用。可看面板的「连接日志」。
+- 远端进程残留：连接断开后受管 `dsh web` 仍保留以便复用；需要时可在远端 `kill $(cat ~/.dsh-ssh-remote/web.pid)`。
 
 ## 限制 / 后续
 
