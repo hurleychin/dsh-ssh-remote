@@ -1,0 +1,7 @@
+# SSH remote-host connector: connect this Harness to the DSH running on
+# another machine over SSH (launch-and-own a remote `dsh web`, forward its
+# loopback port here, hand the browser an authenticated URL).
+- insert:
+    - id: ssh-remote
+      name: '@local/dsh-ssh-remote'
+      config: {}
